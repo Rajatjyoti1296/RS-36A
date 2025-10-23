@@ -1,0 +1,693 @@
+{
+  "rules": {
+    "chat": { ".read": true, ".write": true },
+    "groups": { ".read": true, ".write": true }
+  }
+}
+{
+  "rules": {
+    "chat": { ".read": "auth != null", ".write": "auth != null" },
+    "groups": { ".read": "auth != null", ".write": "auth != null" }
+  }
+}
+portfolio/
+├── netlify.toml
+├── netlify/
+│   └── functions/
+│       └── auth.js
+├── index.html
+├── about.html
+├── projects.html
+├── media.html
+├── chat.html
+├── contact.html
+├── source.html
+├── style.css
+├── script.js
+└── integrity.json
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    Content-Security-Policy = "default-src 'self'; script-src 'self' https://www.gstatic.com https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://via.placeholder.com; media-src 'self' https://www.youtube.com; connect-src 'self' https://.firebaseio.com wss://.firebaseio.com https://.peerjs.com https://formspree.io https://.netlify.app;"
+    X-XSS-Protection = "1; mode=block"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Strict-Transport-Security = "max-age=31536000; includeSubDomains"
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+const bcrypt = require('bcrypt');
+
+exports.handler = async (event) => {
+    const { password, type } = JSON.parse(event.body);
+    const mainPasswordHash = await bcrypt.hash('myPortfolio123', 10);
+    const sourcePasswordHash = await bcrypt.hash('sourceCode456', 10);
+    const isValid = type === 'main' 
+        ? await bcrypt.compare(password, mainPasswordHash)
+        : await bcrypt.compare(password, sourcePasswordHash);
+    return {
+        statusCode: 200,
+        body: JSON.stringify({ valid: isValid })
+    };
+};
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+    <meta http-equiv="X-Frame-Options" content="DENY">
+    <meta name="description" content="Secure portfolio with live chat">
+    <title>My Portfolio - Home</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="cookie-banner" style="position:fixed;bottom:0;width:100%;background:#2c3e50;color:#fff;padding:1rem;text-align:center">
+        <p>We use cookies for analytics and chat. <button onclick="acceptCookies()">Accept</button></p>
+    </div>
+    <div class="password-container" id="password-container">
+        <div>
+            <h2>Enter Password</h2>
+            <input type="password" id="password-input" placeholder="Password" autocomplete="off">
+            <button onclick="checkMainPassword()">Submit</button>
+            <p class="error" id="error-message">Incorrect password. Please try again.</p>
+            <p class="attempts" id="attempts-message">Attempts left: <span id="attempts-count">3</span></p>
+            <p class="timer" id="timer-message">Time left: <span id="timer-count">60</span> seconds</p>
+            <p class="locked" id="locked-message">Too many attempts or time expired. Try again after 24 hours.</p>
+        </div>
+    </div>
+    <header id="header" style="display:none">
+        <input type="text" id="search-box" placeholder="Search portfolio...">
+        <div id="search-results" class="search-results"></div>
+    </header>
+    <nav id="nav" style="display:none">
+        <ul>
+            <li><a href="index.html">Home</a></li>
+            <li><a href="about.html">About</a></li>
+            <li><a href="projects.html">Projects</a></li>
+            <li><a href="media.html">Media</a></li>
+            <li><a href="chat.html">Chat</a></li>
+            <li><a href="contact.html">Contact</a></li>
+            <li><a href="https://github.com" target="_blank">GitHub</a></li>
+            <li><a href="source.html">Source Code</a></li>
+        </ul>
+    </nav>
+    <section id="home" class="hero" style="display:none">
+        <div>
+            <h1>Welcome to My Portfolio</h1>
+            <p>Explore my work, projects, and media. Connect with others via live chat!</p>
+        </div>
+    </section>
+    <div class="chat-section" id="chat-section" style="display:none">
+        <button onclick="toggleChat()">Chat</button>
+        <div class="chat-window" id="chat-window" style="display:none">
+            <div class="chat-box" id="chat-box"></div>
+            <div class="chat-input">
+                <input type="text" id="chat-message" placeholder="Type your message...">
+                <button onclick="sendMessage()">Send</button>
+            </div>
+            <div class="video-section">
+                <input type="text" id="peer-id" placeholder="Enter Peer ID for video call">
+                <button onclick="startVideoCall()">Start Video Call</button>
+                <div id="video-container">
+                    <video id="local-video" autoplay muted></video>
+                    <video id="remote-video" autoplay></video>
+                </div>
+            </div>
+            <div class="group-section">
+                <input type="text" id="group-id" placeholder="Enter Group ID">
+                <button onclick="joinGroup()">Join Group</button>
+                <button onclick="createGroup()">Create Group</button>
+            </div>
+        </div>
+    </div>
+    <footer id="footer" style="display:none">
+        <p>&copy; 2025 My Portfolio. <a href="https://linkedin.com" target="_blank">LinkedIn</a> | <a href="https://twitter.com" target="_blank">Twitter</a> | <a href="privacy.html">Privacy Policy</a></p>
+    </footer>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.4.7/peerjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/2.4.0/purify.min.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
+<footer id="footer">
+    <p>&copy; 2025 My Portfolio. <a href="https://linkedin.com" target="_blank">LinkedIn</a> | <a href="https://twitter.com" target="_blank">Twitter</a> | <a href="privacy.html">Privacy Policy</a></p>
+</footer>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+    <meta http-equiv="X-Frame-Options" content="DENY">
+    <title>My Portfolio - Contact</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="cookie-banner" style="position:fixed;bottom:0;width:100%;background:#2c3e50;color:#fff;padding:1rem;text-align:center">
+        <p>We use cookies for analytics and chat. <button onclick="acceptCookies()">Accept</button></p>
+    </div>
+    <header id="header">
+        <input type="text" id="search-box" placeholder="Search portfolio...">
+        <div id="search-results" class="search-results"></div>
+    </header>
+    <nav id="nav">
+        <ul>
+            <li><a href="index.html">Home</a></li>
+            <li><a href="about.html">About</a></li>
+            <li><a href="projects.html">Projects</a></li>
+            <li><a href="media.html">Media</a></li>
+            <li><a href="chat.html">Chat</a></li>
+            <li><a href="contact.html">Contact</a></li>
+            <li><a href="https://github.com" target="_blank">GitHub</a></li>
+            <li><a href="source.html">Source Code</a></li>
+        </ul>
+    </nav>
+    <section class="contact">
+        <h2>Get in Touch</h2>
+        <form name="contact" method="POST" data-netlify="true">
+            <input type="hidden" name="form-name" value="contact">
+            <input type="text" name="name" placeholder="Your Name" required>
+            <input type="email" name="email" placeholder="Your Email" required>
+            <textarea name="message" placeholder="Your Message" rows="5" required></textarea>
+            <button type="submit">Send Message</button>
+        </form>
+    </section>
+    <div class="chat-section" id="chat-section" style="display:none">
+        <button onclick="toggleChat()">Chat</button>
+        <div class="chat-window" id="chat-window" style="display:none">
+            <div class="chat-box" id="chat-box"></div>
+            <div class="chat-input">
+                <input type="text" id="chat-message" placeholder="Type your message...">
+                <button onclick="sendMessage()">Send</button>
+            </div>
+            <div class="video-section">
+                <input type="text" id="peer-id" placeholder="Enter Peer ID for video call">
+                <button onclick="startVideoCall()">Start Video Call</button>
+                <div id="video-container">
+                    <video id="local-video" autoplay muted></video>
+                    <video id="remote-video" autoplay></video>
+                </div>
+            </div>
+            <div class="group-section">
+                <input type="text" id="group-id" placeholder="Enter Group ID">
+                <button onclick="joinGroup()">Join Group</button>
+                <button onclick="createGroup()">Create Group</button>
+            </div>
+        </div>
+    </div>
+    <footer id="footer">
+        <p>&copy; 2025 My Portfolio. <a href="https://linkedin.com" target="_blank">LinkedIn</a> | <a href="https://twitter.com" target="_blank">Twitter</a> | <a href="privacy.html">Privacy Policy</a></p>
+    </footer>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.4.7/peerjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/2.4.0/purify.min.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+    <meta http-equiv="X-Frame-Options" content="DENY">
+    <title>My Portfolio - Source Code</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="source-password-container" id="source-password-container">
+        <div>
+            <h2>Enter Source Code Password</h2>
+            <input type="password" id="source-password-input" placeholder="Source Code Password" autocomplete="off">
+            <button onclick="checkSourcePassword()">Submit</button>
+            <p class="error" id="source-error-message">Incorrect password. Locked for 168 hours.</p>
+            <p class="locked" id="source-locked-message">Source code access locked. Try again after 168 hours.</p>
+        </div>
+    </div>
+    <section id="source-code" class="source-code" style="display:none"></section>
+    <script src="script.js"></script>
+</body>
+</html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+    <meta http-equiv="X-Frame-Options" content="DENY">
+    <title>Privacy Policy</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="cookie-banner" style="position:fixed;bottom:0;width:100%;background:#2c3e50;color:#fff;padding:1rem;text-align:center">
+        <p>We use cookies for analytics and chat. <button onclick="acceptCookies()">Accept</button></p>
+    </div>
+    <header id="header">
+        <input type="text" id="search-box" placeholder="Search portfolio...">
+        <div id="search-results" class="search-results"></div>
+    </header>
+    <nav id="nav">
+        <ul>
+            <li><a href="index.html">Home</a></li>
+            <li><a href="about.html">About</a></li>
+            <li><a href="projects.html">Projects</a></li>
+            <li><a href="media.html">Media</a></li>
+            <li><a href="chat.html">Chat</a></li>
+            <li><a href="contact.html">Contact</a></li>
+            <li><a href="https://github.com" target="_blank">GitHub</a></li>
+            <li><a href="source.html">Source Code</a></li>
+        </ul>
+    </nav>
+    <section class="privacy">
+        <h2>Privacy Policy</h2>
+        <p>We collect chat messages, form submissions, and analytics data to improve your experience. Data is stored securely with Firebase and Netlify. Contact us to request data deletion.</p>
+    </section>
+    <footer id="footer">
+        <p>&copy; 2025 My Portfolio. <a href="https://linkedin.com" target="_blank">LinkedIn</a> | <a href="https://twitter.com" target="_blank">Twitter</a> | <a href="privacy.html">Privacy Policy</a></p>
+    </footer>
+    <script src="script.js"></script>
+</body>
+</html>
+/* Cookie Banner */
+#cookie-banner button {
+    padding: 0.5rem 1rem;
+    background: #e74c3c;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    margin-left: 1rem;
+}
+#cookie-banner button:hover {
+    background: #c0392b;
+}
+.privacy {
+    padding: 5rem 2rem;
+    max-width: 900px;
+    margin: 2rem auto;
+    text-align: center;
+}
+.privacy h2 {
+    font-size: 2.5rem;
+    margin-bottom: 1.5rem;
+    color: #2c3e50;
+}
+.privacy p {
+    font-size: 1.2rem;
+    color: #555;
+}
+// Firebase Configuration
+const firebaseConfig = {
+    apiKey: "your-api-key",
+    authDomain: "your-project-id.firebaseapp.com",
+    databaseURL: "https://your-project-id.firebaseio.com",
+    projectId: "your-project-id",
+    storageBucket: "your-project-id.appspot.com",
+    messagingSenderId: "your-sender-id",
+    appId: "your-app-id"
+};
+
+// Initialize Firebase and PeerJS
+let peer, localStream;
+if (document.getElementById('chat-box')) {
+    firebase.initializeApp(firebaseConfig);
+    let currentChatRef = firebase.database().ref('chat');
+    let codeName = localStorage.getItem('codeName');
+    if (!codeName) {
+        const themes = ['Cosmonaut', 'Matryoshka', 'Balalaika', 'Sputnik', 'Borscht'];
+        codeName = themes[Math.floor(Math.random() * themes.length)] + Math.floor(100 + Math.random() * 900);
+        localStorage.setItem('codeName', codeName);
+    }
+
+    window.sendMessage = function () {
+        let msg = DOMPurify.sanitize(document.getElementById('chat-message').value.trim());
+        if (msg && localStorage.getItem('cookiesAccepted') === 'true') {
+            currentChatRef.push({ codeName: codeName, message: msg, timestamp: Date.now() });
+            document.getElementById('chat-message').value = '';
+        } else if (!localStorage.getItem('cookiesAccepted')) {
+            alert('Please accept cookies to use the chat.');
+        }
+    };
+
+    function updateChatMessages(ref) {
+        ref.on('child_added', data => {
+            let div = document.createElement('div');
+            div.className = 'chat-message';
+            let date = new Date(data.val().timestamp);
+            let timeStr = date.toLocaleTimeString();
+            div.innerHTML = <p><span class="codename">${data.val().codeName}</span>: ${data.val().message}</p><span class="timestamp">${timeStr}</span>;
+            let chatBox = document.getElementById('chat-box');
+            chatBox.appendChild(div);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        });
+    }
+
+    updateChatMessages(currentChatRef);
+
+    window.createGroup = function () {
+        if (localStorage.getItem('cookiesAccepted') !== 'true') {
+            alert('Please accept cookies to create groups.');
+            return;
+        }
+        let groupId = Math.random().toString(36).substring(2, 10);
+        currentChatRef = firebase.database().ref(groups/${groupId});
+        updateChatMessages(currentChatRef);
+        document.getElementById('group-id').value = groupId;
+        alert(Group created! ID: ${groupId});
+    };
+
+    window.joinGroup = function () {
+        if (localStorage.getItem('cookiesAccepted') !== 'true') {
+            alert('Please accept cookies to join groups.');
+            return;
+        }
+        let groupId = document.getElementById('group-id').value.trim();
+        if (groupId) {
+            currentChatRef.off();
+            currentChatRef = firebase.database().ref(groups/${groupId});
+            updateChatMessages(currentChatRef);
+            document.getElementById('chat-box').innerHTML = '';
+            alert(Joined group: ${groupId});
+        }
+    };
+
+    window.toggleChat = function () {
+        let chatWindow = document.getElementById('chat-window');
+        chatWindow.style.display = chatWindow.style.display === 'none' ? 'block' : 'none';
+    };
+
+    window.startVideoCall = function () {
+        if (localStorage.getItem('cookiesAccepted') !== 'true') {
+            alert('Please accept cookies to start video calls.');
+            return;
+        }
+        let peerId = document.getElementById('peer-id').value.trim();
+        if (!peerId) {
+            alert('Please enter a Peer ID to start a video call.');
+            return;
+        }
+        peer = new Peer();
+        peer.on('open', id => {
+            alert(Your Peer ID: ${id});
+            navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+                .then(stream => {
+                    localStream = stream;
+                    document.getElementById('local-video').srcObject = stream;
+                    let call = peer.call(peerId, stream);
+                    call.on('stream', remoteStream => {
+                        document.getElementById('remote-video').srcObject = remoteStream;
+                    });
+                })
+                .catch(err => alert('Error accessing media devices: ' + err));
+        });
+        peer.on('call', call => {
+            navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+                .then(stream => {
+                    localStream = stream;
+                    document.getElementById('local-video').srcObject = stream;
+                    call.answer(stream);
+                    call.on('stream', remoteStream => {
+                        document.getElementById('remote-video').srcObject = remoteStream;
+                    });
+                });
+        });
+    };
+
+    document.getElementById('chat-message').addEventListener('keypress', function (event) {
+        if (event.key === 'Enter') sendMessage();
+    });
+}
+
+// Cookie Consent
+window.acceptCookies = function () {
+    localStorage.setItem('cookiesAccepted', 'true');
+    document.getElementById('cookie-banner').style.display = 'none';
+};
+if (localStorage.getItem('cookiesAccepted') === 'true') {
+    document.getElementById('cookie-banner').style.display = 'none';
+}
+
+// Password Protection
+let mainAttempts = 3;
+let sourceAttempts = 1;
+let timer = 60;
+let mainLockoutTime = localStorage.getItem('lockoutTime');
+let sourceLockoutTime = localStorage.getItem('sourceLockoutTime');
+
+function showMainContent() {
+    let passwordContainer = document.getElementById('password-container');
+    let header = document.getElementById('header');
+    let nav = document.getElementById('nav');
+    let home = document.getElementById('home');
+    let footer = document.getElementById('footer');
+    let chatSection = document.getElementById('chat-section');
+    if (passwordContainer) passwordContainer.style.display = 'none';
+    if (header) header.style.display = 'block';
+    if (nav) nav.style.display = 'block';
+    if (home) home.style.display = 'block';
+    if (footer) footer.style.display = 'block';
+    if (chatSection) chatSection.style.display = 'block';
+}
+
+function lockMainContent() {
+    document.getElementById('password-container').innerHTML = '<p class="locked" style="display:block">Too many attempts or time expired. Try again after 24 hours.</p>';
+    localStorage.setItem('lockoutTime', Date.now() + 86400000);
+}
+
+function lockSourceContent() {
+    document.getElementById('source-password-container').innerHTML = '<p class="locked" style="display:block">Source code access locked. Try again after 168 hours.</p>';
+    localStorage.setItem('sourceLockoutTime', Date.now() + 604800000);
+}
+
+if (window.location.pathname.includes('index.html')) {
+    if (mainLockoutTime && Date.now() < mainLockoutTime) {
+        lockMainContent();
+    } else {
+        document.getElementById('timer-message').style.display = 'block';
+        let timerInterval = setInterval(() => {
+            timer--;
+            document.getElementById('timer-count').textContent = timer;
+            if (timer <= 0 || mainAttempts <= 0) {
+                lockMainContent();
+                clearInterval(timerInterval);
+            }
+        }, 1000);
+
+        window.checkMainPassword = async function () {
+            if (mainLockoutTime && Date.now() < mainLockoutTime) {
+                lockMainContent();
+                return;
+            }
+            let password = document.getElementById('password-input').value;
+            let errorMessage = document.getElementById('error-message');
+            let attemptsCount = document.getElementById('attempts-count');
+            let attemptsMessage = document.getElementById('attempts-message');
+            try {
+                let response = await fetch('/api/auth', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password, type: 'main' })
+                });
+                let data = await response.json();
+                if (data.valid) {
+                    clearInterval(timerInterval);
+                    localStorage.setItem('authenticated', 'true');
+                    showMainContent();
+                } else {
+                    errorMessage.style.display = 'block';
+                    mainAttempts--;
+                    attemptsCount.textContent = mainAttempts;
+                    attemptsMessage.style.display = 'block';
+                    if (mainAttempts <= 0) {
+                        lockMainContent();
+                        clearInterval(timerInterval);
+                    }
+                }
+            } catch (err) {
+                errorMessage.textContent = 'Error validating password. Try again.';
+                errorMessage.style.display = 'block';
+            }
+        };
+
+        document.getElementById('password-input').addEventListener('keypress', function (event) {
+            if (event.key === 'Enter') checkMainPassword();
+        });
+    }
+}
+
+if (window.location.pathname.includes('source.html')) {
+    if (sourceLockoutTime && Date.now() < sourceLockoutTime) {
+        lockSourceContent();
+    } else {
+        window.checkSourcePassword = async function () {
+            if (sourceLockoutTime && Date.now() < sourceLockoutTime) {
+                lockSourceContent();
+                return;
+            }
+            let password = document.getElementById('source-password-input').value;
+            let errorMessage = document.getElementById('source-error-message');
+            let sourceContainer = document.getElementById('source-password-container');
+            let sourceCode = document.getElementById('source-code');
+            try {
+                let response = await fetch('/api/auth', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password, type: 'source' })
+                });
+                let data = await response.json();
+                if (data.valid) {
+                    sourceContainer.style.display = 'none';
+                    sourceCode.style.display = 'block';
+                    fetch(window.location.pathname)
+                        .then(response => response.text())
+                        .then(data => {
+                            sourceCode.textContent = data.replace(/<script\b[^<](?:(?!<\/script>)<[^<])*<\/script>/gi, '');
+                        });
+                } else {
+                    errorMessage.style.display = 'block';
+                    sourceAttempts--;
+                    if (sourceAttempts <= 0) {
+                        lockSourceContent();
+                    }
+                }
+            } catch (err) {
+                errorMessage.textContent = 'Error validating password. Try again.';
+                errorMessage.style.display = 'block';
+            }
+        };
+
+        document.getElementById('source-password-input').addEventListener('keypress', function (event) {
+            if (event.key === 'Enter') checkSourcePassword();
+        });
+    }
+}
+
+if (localStorage.getItem('authenticated') === 'true' && !window.location.pathname.includes('index.html') && !window.location.pathname.includes('source.html')) {
+    document.querySelector('header').style.display = 'block';
+    document.querySelector('nav').style.display = 'block';
+    document.querySelector('section').style.display = 'block';
+    document.querySelector('footer').style.display = 'block';
+    if (document.getElementById('chat-section')) document.getElementById('chat-section').style.display = 'block';
+}
+
+// Navigation Security
+document.querySelectorAll('a[href$=".html"]').forEach(anchor => {
+    anchor.addEventListener('click', function (e) {
+        if (this.getAttribute('href').includes('source.html') && localStorage.getItem('sourceLockoutTime') && Date.now() < localStorage.getItem('sourceLockoutTime')) {
+            e.preventDefault();
+            window.location.href = 'source.html';
+        } else if (!this.getAttribute('href').includes('source.html') && localStorage.getItem('authenticated') !== 'true') {
+            e.preventDefault();
+            window.location.href = 'index.html';
+        }
+    });
+});
+
+// Search Functionality
+const searchData = [
+    { title: 'About Me', content: 'Web developer passionate about responsive websites.', url: 'about.html' },
+    { title: 'Project 1: E-Commerce Site', content: 'Responsive e-commerce website with cart and checkout.', url: 'projects.html' },
+    { title: 'Project 2: Task Manager', content: 'Task management app with real-time updates.', url: 'projects.html' },
+    { title: 'Media', content: 'Explore my work through videos.', url: 'media.html' }
+];
+
+document.getElementById('search-box').addEventListener('input', function () {
+    let query = this.value.toLowerCase();
+    let results = document.getElementById('search-results');
+    results.innerHTML = '';
+    if (query) {
+        let matches = searchData.filter(item => item.title.toLowerCase().includes(query) || item.content.toLowerCase().includes(query));
+        if (matches.length) {
+            results.style.display = 'block';
+            matches.forEach(item => {
+                let div = document.createElement('div');
+                div.innerHTML = <strong>${item.title}</strong><p>${item.content}</p>;
+                div.onclick = () => window.location.href = item.url;
+                results.appendChild(div);
+            });
+        } else {
+            results.style.display = 'none';
+        }
+    } else {
+        results.style.display = 'none';
+    }
+});
+
+// File Integrity Check
+fetch('/integrity.json')
+    .then(response => response.json())
+    .then(checksums => {
+        fetch(window.location.pathname)
+            .then(response => response.text())
+            .then(data => {
+                let computedHash = hashString(data);
+                if (computedHash !== checksums[window.location.pathname]) {
+                    alert('Warning: File tampering detected!');
+                }
+            });
+    });
+
+function hashString(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        hash = (hash << 5) - hash + str.charCodeAt(i) | 0;
+    }
+    return hash.toString();
+}
+
+// Client-Side Security
+document.addEventListener('contextmenu', e => e.preventDefault());
+document.addEventListener('keydown', e => {
+    if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'J' || e.key === 'C')) || (e.ctrlKey && e.key === 'U')) {
+        e.preventDefault();
+    }
+});
+document.addEventListener('dragstart', e => e.preventDefault());
+document.addEventListener('selectstart', e => e.preventDefault());
+{
+    "/index.html": "replace-with-hash",
+    "/about.html": "replace-with-hash",
+    "/projects.html": "replace-with-hash",
+    "/media.html": "replace-with-hash",
+    "/chat.html": "replace-with-hash",
+    "/contact.html": "replace-with-hash",
+    "/source.html": "replace-with-hash",
+    "/privacy.html": "replace-with-hash"
+}
+const fs = require('fs');
+const crypto = require('crypto');
+const files = ['index.html', 'about.html', 'projects.html', 'media.html', 'chat.html', 'contact.html', 'source.html', 'privacy.html'];
+const checksums = {};
+files.forEach(file => {
+    const content = fs.readFileSync(file, 'utf8');
+    const hash = crypto.createHash('sha256').update(content).digest('hex');
+    checksums[/${file}] = hash;
+});
+fs.writeFileSync('integrity.json', JSON.stringify(checksums, null, 2));
+firebase.database().ref('password_attempts').push({
+    success: data.valid,
+    type: 'main',
+    timestamp: Date.now()
+});
+<li><a href="https://your-new-link.com" target="_blank">New Link</a></li>
+https://wikileaks.org/tisa/document/20160627_TiSA_Annex-on-Financial-Services/
+https://wikileaks.org/tisa/analysis/20161007_TiSA_Analysis-on-Financial-Services-Annex/
+https://wikileaks.org/tisa/document/20160701_TiSA_Bilateral-Market-Access-Request/
+https://wikileaks.org/tisa/analysis/20161007_TiSA_Analysis-on-Market-Access-Requests/
+https://wikileaks.org/tisa/document/20160608_TiSA_Annex-on-Telecommunication/
+https://wikileaks.org/tisa/document/20160627_TiSA_Air-Transport-Services_INTA-Cover-Note/
+https://wikileaks.org/tisa/document/201606_TiSA_Rule-of-Reason-Art15-TS/
+<div class="project-card">
+    <img src="your-image.jpg" alt="Project 3">
+    <h3>Project 3: Title</h3>
+    <p>Description.</p>
+    <a href="your-url" target="_blank">View Project</a>
+</div>
+searchData.push({ title: 'Project 3: Title', content: 'Description.', url: 'projects.html' });
+.hero { background: linear-gradient(135deg, #f1c40f, #e74c3c); }
